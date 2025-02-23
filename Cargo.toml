@@ -1,0 +1,8 @@
+[package]
+name = "cli_file_manager"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tui = "0.19"  # Для создания текстового интерфейса
+crossterm = "0.26"  # Для работы с терминалом
