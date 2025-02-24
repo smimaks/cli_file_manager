@@ -6,10 +6,11 @@ use tui::{
 };
 
 use crossterm::{
-    event::{self, Event, KeyCode},
+    event::{self, Event, KeyCode, ModifierKeyCode},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, LeaveAlternateScreen},
 };
+use crossterm::event::{KeyEvent, KeyModifiers};
 
 mod app;
 mod ui;
@@ -49,18 +50,20 @@ fn main() -> io::Result<()> {
             Mode::Menu => {
                match file_manager.get_input_mode() {
                    InputMode::Input => {
-                       if let Event::Key(key) = event::read()? {
-                           match key.code {
+                       if let Event::Key(KeyEvent { code, modifiers, .. }) = event::read()? {
+                           if modifiers == KeyModifiers::CONTROL && code == KeyCode::Char('c') {
+                               file_manager.disable_input_mode()
+                           }
+                           match code {
                                KeyCode::Char(c) => file_manager.add_to_input_buffer(c),
                                KeyCode::Backspace => file_manager.delete_from_input_buffer(),
                                KeyCode::Enter => {
-
                                    file_manager.handle_menu_action()?;
                                }
-
                                _ => {}
                            }
                        }
+
                    }
                    InputMode::Normal => {
                        if let Event::Key(key) = event::read()? {
