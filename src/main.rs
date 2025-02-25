@@ -22,6 +22,7 @@ fn main() -> io::Result<()> {
     let stdout = io::stdout();
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
+    terminal.clear()?;
 
     // init App
     let mut file_manager = FileManager::new().expect("Error FileManager init");
@@ -30,13 +31,18 @@ fn main() -> io::Result<()> {
         terminal.draw(|f| render(f, &file_manager))?;
 
         let event = event::read()?;
-        match file_manager.get_mode() {
-            Mode::Normal => input_handler::handle_normal_mode(event, &mut file_manager)?,
-            Mode::Menu => input_handler::handle_menu_mode(event, &mut file_manager)?,
+        let result = match file_manager.get_mode() {
+            Mode::Normal => input_handler::handle_normal_mode(event, &mut file_manager),
+            Mode::Menu => input_handler::handle_menu_mode(event, &mut file_manager),
+        };
+
+        if let Err(error) = result {
+            terminal.clear()?;
+            disable_raw_mode()?;
+            execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+            break;
         }
     }
 
-    disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     Ok(())
 }

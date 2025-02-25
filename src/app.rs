@@ -243,20 +243,18 @@ impl FileManager {
         match self.menu_selected {
             0 => self.delete_selected()?,
             1 => {
-                self.input_mode = InputMode::Input;
+                self.enable_input_mode();
                 self.menu_action = Option::from(MenuAction::CreateFile);
             }
             2 => {
-                self.input_mode = InputMode::Input;
+                self.enable_input_mode();
                 self.menu_action = Option::from(MenuAction::CreateDir);
             }
             3 => {
-                self.input_mode = InputMode::Input;
+                self.enable_input_mode();
                 self.menu_action = Option::from(MenuAction::Rename);
             }
-            _ => {
-                self.mode = Mode::Normal;
-            }
+            _ => self.disable_input_mode(),
         }
         Ok(())
     }
