@@ -72,7 +72,7 @@ impl FileManager {
         &self.selected
     }
 
-    pub fn get_files(&self) ->  &Vec<PathBuf> {
+    pub fn get_files(&self) -> &Vec<PathBuf> {
         &self.files
     }
 
@@ -109,6 +109,7 @@ impl FileManager {
         files.sort();
         Ok(files)
     }
+
     // Navigation
     pub fn enter_handler(&mut self) -> io::Result<()> {
         if let Some(path) = self.files.get(self.selected) {
@@ -155,14 +156,18 @@ impl FileManager {
     pub fn up(&mut self) {
         if self.selected > 0 {
             self.selected -= 1;
-            self.file_scroll = 0;
-            self.open_file().unwrap();
+        } else {
+            self.selected = self.files.len() - 1;
         }
+        self.file_scroll = 0;
+        self.open_file().unwrap();
     }
 
     pub fn menu_up(&mut self) {
         if self.menu_selected > 0 {
             self.menu_selected -= 1
+        } else {
+            self.menu_selected = self.show_menu().len() - 1;
         }
     }
 
@@ -177,12 +182,19 @@ impl FileManager {
             self.selected += 1;
             self.file_scroll = 0;
             self.open_file().unwrap();
+        } else {
+            self.selected = 0
         }
+
+        self.file_scroll = 0;
+        self.open_file().unwrap();
     }
 
     pub fn menu_down(&mut self) {
         if self.menu_selected < self.show_menu().len() - 1 {
             self.menu_selected += 1;
+        } else {
+            self.menu_selected = 0;
         }
     }
 
@@ -233,22 +245,23 @@ impl FileManager {
             1 => {
                 self.input_mode = InputMode::Input;
                 self.menu_action = Option::from(MenuAction::CreateFile);
-            },
+            }
             2 => {
                 self.input_mode = InputMode::Input;
                 self.menu_action = Option::from(MenuAction::CreateDir);
-            },
+            }
             3 => {
                 self.input_mode = InputMode::Input;
                 self.menu_action = Option::from(MenuAction::Rename);
-            },
-            _ => {}
+            }
+            _ => {
+                self.mode = Mode::Normal;
+            }
         }
         Ok(())
     }
 
     pub fn handle_menu_action(&mut self) -> io::Result<()> {
-
         if let Some(action) = self.menu_action.take() {
             match action {
                 MenuAction::CreateFile => self.create_file()?,
@@ -298,7 +311,7 @@ impl FileManager {
         let new_name = self.input_buffer.trim();
         if let Some(path) = self.files.get(self.selected) {
             if !new_name.is_empty() {
-                let new_path = self.current_dir.parent().unwrap().join(new_name);
+                let new_path = path.parent().unwrap().join(new_name);
                 fs::rename(path, new_path)?;
                 self.update_file_list()?;
             }
