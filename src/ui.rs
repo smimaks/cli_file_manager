@@ -15,13 +15,13 @@ pub fn ui<B: Backend>(f: &mut Frame<B>, file_manager: &FileManager) {
 
     let mut state = ListState::default();
 
-    state.select(Some(file_manager.selected));
+    state.select(Some(*file_manager.get_selected()));
     let items: Vec<ListItem> = file_manager
-        .files
+        .get_files()
         .iter()
         .enumerate()
         .map(|(i, path)| {
-            let style = if i == file_manager.selected {
+            let style = if i == *file_manager.get_selected() {
                 Style::default().fg(Color::White)
             } else {
                 Style::default()
@@ -42,12 +42,12 @@ pub fn ui<B: Backend>(f: &mut Frame<B>, file_manager: &FileManager) {
 
     f.render_stateful_widget(list, chunks[0], &mut state);
 
-    match file_manager.mode {
+    match file_manager.get_mode() {
         Mode::Normal => {
-            if let Some(content) = &file_manager.content {
+            if let Some(content) = &file_manager.get_content() {
                 let paragraph = Paragraph::new(content.as_ref())
                     .block(Block::default().borders(Borders::ALL).title("File"))
-                    .scroll((file_manager.file_scroll as u16, 0));
+                    .scroll((*file_manager.get_file_scroll() as u16, 0));
                 f.render_widget(paragraph, chunks[1]);
             } else {
                 let paragraph = Paragraph::new("No file selected")
@@ -56,9 +56,9 @@ pub fn ui<B: Backend>(f: &mut Frame<B>, file_manager: &FileManager) {
             }
         }
         Mode::Menu => {
-          match file_manager.input_mode {
+          match file_manager.get_input_mode() {
               InputMode::Input => {
-                  let input = Paragraph::new(file_manager.input_buffer.as_ref())
+                  let input = Paragraph::new(file_manager.get_input_buffer().as_ref())
                       .block(Block::default().borders(Borders::ALL).title("Введите имя: "));
                   f.render_widget(input, chunks[1]);
               }
@@ -68,7 +68,7 @@ pub fn ui<B: Backend>(f: &mut Frame<B>, file_manager: &FileManager) {
                       .iter()
                       .enumerate()
                       .map(|(i, action)| {
-                          let style = if i == file_manager.menu_selected {
+                          let style = if i == *file_manager.get_menu_selected() {
                               Style::default().fg(Color::LightBlue)
                           } else {
                               Style::default()

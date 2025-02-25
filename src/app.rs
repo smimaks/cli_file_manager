@@ -25,17 +25,17 @@ pub enum MenuAction {
 
 pub struct FileManager {
     current_dir: PathBuf,
-    pub(crate) files: Vec<PathBuf>,
-    pub(crate) selected: usize,
-    pub(crate) content: Option<String>,
-    pub(crate) scroll: usize,
-    pub(crate) file_scroll: usize,
+    files: Vec<PathBuf>,
+    selected: usize,
+    content: Option<String>,
+    scroll: usize,
+    file_scroll: usize,
     file_lines_count: usize,
-    pub(crate) mode: Mode,
-    pub(crate) input_mode: InputMode,
-    pub(crate) input_buffer: String,
+    mode: Mode,
+    input_mode: InputMode,
+    input_buffer: String,
     menu_action: Option<MenuAction>,
-    pub(crate) menu_selected: usize,
+    menu_selected: usize,
 }
 
 impl FileManager {
@@ -59,6 +59,48 @@ impl FileManager {
         })
     }
 
+    // Getters
+    pub fn get_mode(&self) -> &Mode {
+        &self.mode
+    }
+
+    pub fn get_input_mode(&self) -> &InputMode {
+        &self.input_mode
+    }
+
+    pub fn get_selected(&self) -> &usize {
+        &self.selected
+    }
+
+    pub fn get_files(&self) ->  &Vec<PathBuf> {
+        &self.files
+    }
+
+    pub fn get_content(&self) -> &Option<String> {
+        &self.content
+    }
+
+    pub fn get_file_scroll(&self) -> &usize {
+        &self.file_scroll
+    }
+
+    pub fn get_input_buffer(&self) -> &String {
+        &self.input_buffer
+    }
+
+    pub fn get_menu_selected(&self) -> &usize {
+        &self.menu_selected
+    }
+
+    // Setters
+    pub fn add_to_input_buffer(&mut self, c: char) {
+        self.input_buffer.push(c);
+    }
+
+    pub fn delete_from_input_buffer(&mut self) {
+        self.input_buffer.pop();
+    }
+
     pub fn files_list(path: &Path) -> io::Result<Vec<PathBuf>> {
         let mut files = fs::read_dir(path)?
             .filter_map(|entry| entry.ok())
@@ -71,16 +113,16 @@ impl FileManager {
     pub fn enter_handler(&mut self) -> io::Result<()> {
         if let Some(path) = self.files.get(self.selected) {
             if path.is_dir() {
-                Self::enter_dir(self, self.selected)?;
+                self.enter_dir()?;
             } else {
-                Self::open_file(self, self.selected)?;
+                self.open_file()?;
             }
         }
         Ok(())
     }
 
-    fn enter_dir(&mut self, index: usize) -> io::Result<()> {
-        if let Some(path) = self.files.get(index) {
+    fn enter_dir(&mut self) -> io::Result<()> {
+        if let Some(path) = self.files.get(self.selected) {
             self.current_dir = path.to_path_buf();
             self.files = Self::files_list(&self.current_dir)?;
             self.selected = 0;
@@ -88,8 +130,8 @@ impl FileManager {
         Ok(())
     }
 
-    fn open_file(&mut self, index: usize) -> io::Result<()> {
-        if let Some(path) = self.files.get(index) {
+    fn open_file(&mut self) -> io::Result<()> {
+        if let Some(path) = self.files.get(self.selected) {
             if path.is_file() {
                 self.content = Some(fs::read_to_string(path)?);
                 self.file_lines_count = Self::get_file_lines_count(path);
@@ -113,6 +155,8 @@ impl FileManager {
     pub fn up(&mut self) {
         if self.selected > 0 {
             self.selected -= 1;
+            self.file_scroll = 0;
+            self.open_file().unwrap();
         }
     }
 
@@ -131,6 +175,8 @@ impl FileManager {
     pub fn down(&mut self) {
         if self.selected < self.files.len() - 1 {
             self.selected += 1;
+            self.file_scroll = 0;
+            self.open_file().unwrap();
         }
     }
 
@@ -152,14 +198,25 @@ impl FileManager {
         reader.lines().count()
     }
 
-    // Menu
-    pub fn to_menu_mode(&mut self) {
+    //  Modes
+    pub fn enable_menu_mode(&mut self) {
         self.mode = Mode::Menu;
     }
 
-    pub fn to_normal_mode(&mut self) {
+    pub fn disable_menu_mode(&mut self) {
         self.mode = Mode::Normal;
     }
+
+    pub fn enable_input_mode(&mut self) {
+        self.input_mode = InputMode::Input
+    }
+
+    pub fn disable_input_mode(&mut self) {
+        self.input_mode = InputMode::Normal
+    }
+
+    // Menu
+
     pub fn show_menu(&self) -> Vec<&str> {
         vec![
             "Удалить",
@@ -191,6 +248,7 @@ impl FileManager {
     }
 
     pub fn handle_menu_action(&mut self) -> io::Result<()> {
+
         if let Some(action) = self.menu_action.take() {
             match action {
                 MenuAction::CreateFile => self.create_file()?,
@@ -199,7 +257,7 @@ impl FileManager {
                 _ => {}
             }
         };
-
+        self.disable_input_mode();
         Ok(())
     }
 
