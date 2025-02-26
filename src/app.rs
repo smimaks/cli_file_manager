@@ -4,10 +4,13 @@ use std::{
     fs::{self, File},
     io::{self, BufRead},
 };
+use fuzzy_matcher::FuzzyMatcher;
+use fuzzy_matcher::skim::SkimMatcherV2;
 
 pub enum Mode {
     Normal,
     Menu,
+    Search,
 }
 
 pub enum InputMode {
@@ -25,17 +28,18 @@ pub enum MenuAction {
 
 pub struct FileManager {
     current_dir: PathBuf,
-    pub(crate) files: Vec<PathBuf>,
-    pub(crate) selected: usize,
-    pub(crate) content: Option<String>,
-    pub(crate) scroll: usize,
-    pub(crate) file_scroll: usize,
+    files: Vec<PathBuf>,
+    selected: usize,
+    content: Option<String>,
+    scroll: usize,
+    file_scroll: usize,
     file_lines_count: usize,
-    pub(crate) mode: Mode,
-    pub(crate) input_mode: InputMode,
-    pub(crate) input_buffer: String,
+    mode: Mode,
+    input_mode: InputMode,
+    input_buffer: String,
     menu_action: Option<MenuAction>,
-    pub(crate) menu_selected: usize,
+    menu_selected: usize,
+    search_buffer: String,
 }
 
 impl FileManager {
@@ -56,7 +60,45 @@ impl FileManager {
             input_buffer: String::new(),
             menu_action: None,
             menu_selected: 0,
+            search_buffer: String::new(),
         })
+    }
+
+    // Getters
+    pub fn get_mode(&self) -> &Mode {
+        &self.mode
+    }
+
+    pub fn get_input_mode(&self) -> &InputMode {
+        &self.input_mode
+    }
+
+    pub fn get_selected(&self) -> &usize {
+        &self.selected
+    }
+
+    pub fn get_files(&self) -> &Vec<PathBuf> {
+        &self.files
+    }
+
+    pub fn get_content(&self) -> &Option<String> {
+        &self.content
+    }
+
+    pub fn get_file_scroll(&self) -> &usize {
+        &self.file_scroll
+    }
+
+    pub fn get_input_buffer(&self) -> &String {
+        &self.input_buffer
+    }
+
+    pub fn get_search_buffer(&self) -> &String {
+        &self.search_buffer
+    }
+
+    pub fn get_menu_selected(&self) -> &usize {
+        &self.menu_selected
     }
 
     pub fn files_list(path: &Path) -> io::Result<Vec<PathBuf>> {
@@ -67,20 +109,38 @@ impl FileManager {
         files.sort();
         Ok(files)
     }
+
+    // Setters
+    pub fn add_to_input_buffer(&mut self, c: char) {
+        self.input_buffer.push(c);
+    }
+
+    pub fn delete_from_input_buffer(&mut self) {
+        self.input_buffer.pop();
+    }
+
+    pub fn add_to_search_buffer(&mut self, c: char) {
+        self.search_buffer.push(c);
+    }
+
+    pub fn delete_from_search_buffer(&mut self) {
+        self.search_buffer.pop();
+    }
+
     // Navigation
     pub fn enter_handler(&mut self) -> io::Result<()> {
         if let Some(path) = self.files.get(self.selected) {
             if path.is_dir() {
-                Self::enter_dir(self, self.selected)?;
+                self.enter_dir()?;
             } else {
-                Self::open_file(self, self.selected)?;
+                self.open_file()?;
             }
         }
         Ok(())
     }
 
-    fn enter_dir(&mut self, index: usize) -> io::Result<()> {
-        if let Some(path) = self.files.get(index) {
+    fn enter_dir(&mut self) -> io::Result<()> {
+        if let Some(path) = self.files.get(self.selected) {
             self.current_dir = path.to_path_buf();
             self.files = Self::files_list(&self.current_dir)?;
             self.selected = 0;
@@ -88,8 +148,8 @@ impl FileManager {
         Ok(())
     }
 
-    fn open_file(&mut self, index: usize) -> io::Result<()> {
-        if let Some(path) = self.files.get(index) {
+    fn open_file(&mut self) -> io::Result<()> {
+        if let Some(path) = self.files.get(self.selected) {
             if path.is_file() {
                 self.content = Some(fs::read_to_string(path)?);
                 self.file_lines_count = Self::get_file_lines_count(path);
@@ -113,12 +173,18 @@ impl FileManager {
     pub fn up(&mut self) {
         if self.selected > 0 {
             self.selected -= 1;
+        } else {
+            self.selected = self.files.len() - 1;
         }
+        self.file_scroll = 0;
+        self.open_file().unwrap();
     }
 
     pub fn menu_up(&mut self) {
         if self.menu_selected > 0 {
             self.menu_selected -= 1
+        } else {
+            self.menu_selected = self.show_menu().len() - 1;
         }
     }
 
@@ -131,12 +197,21 @@ impl FileManager {
     pub fn down(&mut self) {
         if self.selected < self.files.len() - 1 {
             self.selected += 1;
+            self.file_scroll = 0;
+            self.open_file().unwrap();
+        } else {
+            self.selected = 0
         }
+
+        self.file_scroll = 0;
+        self.open_file().unwrap();
     }
 
     pub fn menu_down(&mut self) {
         if self.menu_selected < self.show_menu().len() - 1 {
             self.menu_selected += 1;
+        } else {
+            self.menu_selected = 0;
         }
     }
 
@@ -146,20 +221,58 @@ impl FileManager {
         }
     }
 
+    pub fn find_in_current_dir(&mut self) {
+        let file_name = self.search_buffer.trim();
+        if file_name.is_empty() {
+            return;
+        }
+
+        let matcher = SkimMatcherV2::default();
+
+        if let Some((index, _)) = self.files.iter().enumerate().find(|(_, path)| {
+            path.file_name() // Получаем имя файла
+                .and_then(|os_str| os_str.to_str())
+                .map_or(false, |name| matcher.fuzzy_match(name, file_name).is_some())
+        }) {
+            self.selected = index;
+        } else {
+            println!("No file matches '{}'.", file_name);
+        }
+
+        self.search_buffer.clear();
+        self.default_input_mode();
+        self.default_mode();
+    }
+
     fn get_file_lines_count(path: &PathBuf) -> usize {
         let file = File::open(path).expect("Open file error");
         let reader = BufReader::new(file);
         reader.lines().count()
     }
 
-    // Menu
-    pub fn to_menu_mode(&mut self) {
+    //  Modes
+    pub fn menu_mode(&mut self) {
         self.mode = Mode::Menu;
     }
 
-    pub fn to_normal_mode(&mut self) {
+    pub fn default_mode(&mut self) {
         self.mode = Mode::Normal;
     }
+
+    pub fn search_mode(&mut self) {
+        self.mode = Mode::Search;
+    }
+
+    pub fn input_mode(&mut self) {
+        self.input_mode = InputMode::Input
+    }
+
+    pub fn default_input_mode(&mut self) {
+        self.input_mode = InputMode::Normal
+    }
+
+    // Menu
+
     pub fn show_menu(&self) -> Vec<&str> {
         vec![
             "Удалить",
@@ -174,18 +287,18 @@ impl FileManager {
         match self.menu_selected {
             0 => self.delete_selected()?,
             1 => {
-                self.input_mode = InputMode::Input;
+                self.input_mode();
                 self.menu_action = Option::from(MenuAction::CreateFile);
-            },
+            }
             2 => {
-                self.input_mode = InputMode::Input;
+                self.input_mode();
                 self.menu_action = Option::from(MenuAction::CreateDir);
-            },
+            }
             3 => {
-                self.input_mode = InputMode::Input;
+                self.input_mode();
                 self.menu_action = Option::from(MenuAction::Rename);
-            },
-            _ => {}
+            }
+            _ => self.default_input_mode(),
         }
         Ok(())
     }
@@ -199,7 +312,7 @@ impl FileManager {
                 _ => {}
             }
         };
-
+        self.default_input_mode();
         Ok(())
     }
 
@@ -240,7 +353,7 @@ impl FileManager {
         let new_name = self.input_buffer.trim();
         if let Some(path) = self.files.get(self.selected) {
             if !new_name.is_empty() {
-                let new_path = self.current_dir.parent().unwrap().join(new_name);
+                let new_path = path.parent().unwrap().join(new_name);
                 fs::rename(path, new_path)?;
                 self.update_file_list()?;
             }
@@ -261,4 +374,6 @@ impl FileManager {
         self.update_file_list()?;
         Ok(())
     }
+
+    //     search
 }
