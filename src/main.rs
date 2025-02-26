@@ -32,8 +32,9 @@ fn main() -> io::Result<()> {
 
         let event = event::read()?;
         let result = match file_manager.get_mode() {
-            Mode::Normal => input_handler::handle_normal_mode(event, &mut file_manager),
-            Mode::Menu => input_handler::handle_menu_mode(event, &mut file_manager),
+            Mode::Normal => input_handler::normal_mode(event, &mut file_manager),
+            Mode::Menu => input_handler::menu_mode(event, &mut file_manager),
+            Mode::Search => input_handler::search_mode(event, &mut file_manager),
         };
 
         if let Err(error) = result {

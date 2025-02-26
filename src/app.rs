@@ -4,10 +4,13 @@ use std::{
     fs::{self, File},
     io::{self, BufRead},
 };
+use fuzzy_matcher::FuzzyMatcher;
+use fuzzy_matcher::skim::SkimMatcherV2;
 
 pub enum Mode {
     Normal,
     Menu,
+    Search,
 }
 
 pub enum InputMode {
@@ -36,6 +39,7 @@ pub struct FileManager {
     input_buffer: String,
     menu_action: Option<MenuAction>,
     menu_selected: usize,
+    search_buffer: String,
 }
 
 impl FileManager {
@@ -56,6 +60,7 @@ impl FileManager {
             input_buffer: String::new(),
             menu_action: None,
             menu_selected: 0,
+            search_buffer: String::new(),
         })
     }
 
@@ -88,8 +93,21 @@ impl FileManager {
         &self.input_buffer
     }
 
+    pub fn get_search_buffer(&self) -> &String {
+        &self.search_buffer
+    }
+
     pub fn get_menu_selected(&self) -> &usize {
         &self.menu_selected
+    }
+
+    pub fn files_list(path: &Path) -> io::Result<Vec<PathBuf>> {
+        let mut files = fs::read_dir(path)?
+            .filter_map(|entry| entry.ok())
+            .map(|entry| entry.path())
+            .collect::<Vec<_>>();
+        files.sort();
+        Ok(files)
     }
 
     // Setters
@@ -101,13 +119,12 @@ impl FileManager {
         self.input_buffer.pop();
     }
 
-    pub fn files_list(path: &Path) -> io::Result<Vec<PathBuf>> {
-        let mut files = fs::read_dir(path)?
-            .filter_map(|entry| entry.ok())
-            .map(|entry| entry.path())
-            .collect::<Vec<_>>();
-        files.sort();
-        Ok(files)
+    pub fn add_to_search_buffer(&mut self, c: char) {
+        self.search_buffer.push(c);
+    }
+
+    pub fn delete_from_search_buffer(&mut self) {
+        self.search_buffer.pop();
     }
 
     // Navigation
@@ -204,6 +221,29 @@ impl FileManager {
         }
     }
 
+    pub fn find_in_current_dir(&mut self) {
+        let file_name = self.search_buffer.trim();
+        if file_name.is_empty() {
+            return;
+        }
+
+        let matcher = SkimMatcherV2::default();
+
+        if let Some((index, _)) = self.files.iter().enumerate().find(|(_, path)| {
+            path.file_name() // Получаем имя файла
+                .and_then(|os_str| os_str.to_str())
+                .map_or(false, |name| matcher.fuzzy_match(name, file_name).is_some())
+        }) {
+            self.selected = index;
+        } else {
+            println!("No file matches '{}'.", file_name);
+        }
+
+        self.search_buffer.clear();
+        self.default_input_mode();
+        self.default_mode();
+    }
+
     fn get_file_lines_count(path: &PathBuf) -> usize {
         let file = File::open(path).expect("Open file error");
         let reader = BufReader::new(file);
@@ -211,19 +251,23 @@ impl FileManager {
     }
 
     //  Modes
-    pub fn enable_menu_mode(&mut self) {
+    pub fn menu_mode(&mut self) {
         self.mode = Mode::Menu;
     }
 
-    pub fn disable_menu_mode(&mut self) {
+    pub fn default_mode(&mut self) {
         self.mode = Mode::Normal;
     }
 
-    pub fn enable_input_mode(&mut self) {
+    pub fn search_mode(&mut self) {
+        self.mode = Mode::Search;
+    }
+
+    pub fn input_mode(&mut self) {
         self.input_mode = InputMode::Input
     }
 
-    pub fn disable_input_mode(&mut self) {
+    pub fn default_input_mode(&mut self) {
         self.input_mode = InputMode::Normal
     }
 
@@ -243,18 +287,18 @@ impl FileManager {
         match self.menu_selected {
             0 => self.delete_selected()?,
             1 => {
-                self.enable_input_mode();
+                self.input_mode();
                 self.menu_action = Option::from(MenuAction::CreateFile);
             }
             2 => {
-                self.enable_input_mode();
+                self.input_mode();
                 self.menu_action = Option::from(MenuAction::CreateDir);
             }
             3 => {
-                self.enable_input_mode();
+                self.input_mode();
                 self.menu_action = Option::from(MenuAction::Rename);
             }
-            _ => self.disable_input_mode(),
+            _ => self.default_input_mode(),
         }
         Ok(())
     }
@@ -268,7 +312,7 @@ impl FileManager {
                 _ => {}
             }
         };
-        self.disable_input_mode();
+        self.default_input_mode();
         Ok(())
     }
 
@@ -330,4 +374,6 @@ impl FileManager {
         self.update_file_list()?;
         Ok(())
     }
+
+    //     search
 }

@@ -87,5 +87,13 @@ pub fn render<B: Backend>(f: &mut Frame<B>, file_manager: &FileManager) {
                 f.render_widget(menu, chunks[1]);
             }
         },
+        Mode::Search => {
+            let input = Paragraph::new(file_manager.get_search_buffer().as_ref()).block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Введите имя: "),
+            );
+            f.render_widget(input, chunks[1]);
+        }
     }
 }
