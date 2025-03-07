@@ -7,6 +7,7 @@ pub fn normal_mode(event: Event, file_manager: &mut FileManager) -> io::Result<(
         match key.code {
             KeyCode::Char('q') => return Err(io::Error::new(io::ErrorKind::Interrupted, "Quit")),
             KeyCode::Char('m') => file_manager.menu_mode(),
+            KeyCode::Char('o') => file_manager.context_mode(),
             KeyCode::Down => file_manager.down(),
             KeyCode::Up => file_manager.up(),
             KeyCode::PageDown => file_manager.page_down(),
@@ -29,6 +30,19 @@ pub fn menu_mode(event: Event, file_manager: &mut FileManager) -> io::Result<()>
             .unwrap_or_else(|err| eprintln!("Error: {}", err)),
     }
 
+    Ok(())
+}
+
+pub fn context_mode(event: Event, file_manager: &mut FileManager) -> io::Result<()> {
+    if let Event::Key(key) = event {
+        match key.code {
+            KeyCode::Esc | KeyCode::Backspace => file_manager.default_input_mode(),
+            KeyCode::Down => file_manager.context_down(),
+            KeyCode::Up => file_manager.context_up(),
+            KeyCode::Enter | KeyCode::Right => file_manager.select_from_context()?,
+            _ => {}
+        }
+    }
     Ok(())
 }
 
@@ -79,6 +93,7 @@ fn handle_normal_input_mode(event: Event, file_manager: &mut FileManager) -> io:
             KeyCode::Down => file_manager.menu_down(),
             KeyCode::Up => file_manager.menu_up(),
             KeyCode::Enter | KeyCode::Right => file_manager.select_from_menu()?,
+            KeyCode::Char('o') | KeyCode::Char('O') => file_manager.context_mode(),
             _ => {}
         }
     }

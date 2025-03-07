@@ -35,6 +35,7 @@ fn main() -> io::Result<()> {
             Mode::Normal => input_handler::normal_mode(event, &mut file_manager),
             Mode::Menu => input_handler::menu_mode(event, &mut file_manager),
             Mode::Search => input_handler::search_mode(event, &mut file_manager),
+            Mode::Context => input_handler::context_mode(event, &mut file_manager),
         };
 
         if let Err(error) = result {

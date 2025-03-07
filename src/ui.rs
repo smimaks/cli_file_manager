@@ -95,5 +95,24 @@ pub fn render<B: Backend>(f: &mut Frame<B>, file_manager: &FileManager) {
             );
             f.render_widget(input, chunks[1]);
         }
+        Mode::Context => {
+            let menu_items = file_manager.show_context();
+            let items: Vec<ListItem> = menu_items
+                .iter()
+                .enumerate()
+                .map(|(i, action)| {
+                    let style = if i == *file_manager.get_context_selected() {
+                        Style::default().fg(Color::Blue)
+                    } else {
+                        Style::default()
+                    };
+                    ListItem::new(Span::styled(*action, style))
+                })
+                .collect();
+            let menu = List::new(items)
+                .block(Block::default().borders(Borders::ALL).title("Action Menu"))
+                .highlight_symbol("=>");
+            f.render_widget(menu, chunks[1]);
+        }
     }
 }

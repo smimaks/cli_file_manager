@@ -1,16 +1,18 @@
+use fuzzy_matcher::skim::SkimMatcherV2;
+use fuzzy_matcher::FuzzyMatcher;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 use std::{
     fs::{self, File},
     io::{self, BufRead},
 };
-use fuzzy_matcher::FuzzyMatcher;
-use fuzzy_matcher::skim::SkimMatcherV2;
 
 pub enum Mode {
     Normal,
     Menu,
     Search,
+    Context,
 }
 
 pub enum InputMode {
@@ -26,6 +28,10 @@ pub enum MenuAction {
     Cancel,
 }
 
+pub enum ContextAction {
+    Open,
+}
+
 pub struct FileManager {
     current_dir: PathBuf,
     files: Vec<PathBuf>,
@@ -39,13 +45,15 @@ pub struct FileManager {
     input_buffer: String,
     menu_action: Option<MenuAction>,
     menu_selected: usize,
+    context_action: Option<ContextAction>,
+    context_selected: usize,
     search_buffer: String,
 }
 
 impl FileManager {
     pub fn new() -> io::Result<Self> {
         let current_dir = std::env::current_dir()?;
-        let files = Self::files_list(&current_dir)?;
+        let files = Self::get_file_list(&current_dir)?;
 
         Ok(Self {
             current_dir,
@@ -60,6 +68,8 @@ impl FileManager {
             input_buffer: String::new(),
             menu_action: None,
             menu_selected: 0,
+            context_action: None,
+            context_selected: 0,
             search_buffer: String::new(),
         })
     }
@@ -101,7 +111,11 @@ impl FileManager {
         &self.menu_selected
     }
 
-    pub fn files_list(path: &Path) -> io::Result<Vec<PathBuf>> {
+    pub fn get_context_selected(&self) -> &usize {
+        &self.context_selected
+    }
+
+    pub fn get_file_list(path: &Path) -> io::Result<Vec<PathBuf>> {
         let mut files = fs::read_dir(path)?
             .filter_map(|entry| entry.ok())
             .map(|entry| entry.path())
@@ -110,7 +124,6 @@ impl FileManager {
         Ok(files)
     }
 
-    // Setters
     pub fn add_to_input_buffer(&mut self, c: char) {
         self.input_buffer.push(c);
     }
@@ -142,7 +155,7 @@ impl FileManager {
     fn enter_dir(&mut self) -> io::Result<()> {
         if let Some(path) = self.files.get(self.selected) {
             self.current_dir = path.to_path_buf();
-            self.files = Self::files_list(&self.current_dir)?;
+            self.files = Self::get_file_list(&self.current_dir)?;
             self.selected = 0;
         }
         Ok(())
@@ -163,7 +176,7 @@ impl FileManager {
     pub fn to_parent_dir(&mut self) -> io::Result<()> {
         if let Some(parent) = self.current_dir.parent() {
             self.current_dir = parent.to_path_buf();
-            self.files = Self::files_list(&self.current_dir)?;
+            self.files = Self::get_file_list(&self.current_dir)?;
             self.selected = 0;
             self.content = None;
         }
@@ -185,6 +198,14 @@ impl FileManager {
             self.menu_selected -= 1
         } else {
             self.menu_selected = self.show_menu().len() - 1;
+        }
+    }
+
+    pub fn context_up(&mut self) {
+        if self.context_selected > 0 {
+            self.context_selected -= 1
+        } else {
+            self.context_selected = self.show_menu().len() - 1;
         }
     }
 
@@ -212,6 +233,14 @@ impl FileManager {
             self.menu_selected += 1;
         } else {
             self.menu_selected = 0;
+        }
+    }
+
+    pub fn context_down(&mut self) {
+        if self.context_selected < self.show_context().len() - 1 {
+            self.context_selected += 1;
+        } else {
+            self.context_selected = 0;
         }
     }
 
@@ -263,6 +292,10 @@ impl FileManager {
         self.mode = Mode::Search;
     }
 
+    pub fn context_mode(&mut self) {
+        self.mode = Mode::Context
+    }
+
     pub fn input_mode(&mut self) {
         self.input_mode = InputMode::Input
     }
@@ -279,6 +312,17 @@ impl FileManager {
             "Создать файл",
             "Создать папку",
             "Переименовать",
+            "Отмена",
+        ]
+    }
+
+    pub fn show_context(&self) -> Vec<&str> {
+        vec![
+            "Открыть в Nano",
+            "Открыть в Vim",
+            "Открыть в WebStorm",
+            "Открыть в RustRover",
+            "Открыть в VS Code",
             "Отмена",
         ]
     }
@@ -300,6 +344,34 @@ impl FileManager {
             }
             _ => self.default_input_mode(),
         }
+        Ok(())
+    }
+
+    pub fn select_from_context(&mut self) -> io::Result<()> {
+        let file_path = self.files.get(self.selected);
+        let editors = vec!["nano", "vim", "webstorm", "rustrover", "code"];
+        let current_editor = editors.get(self.context_selected);
+
+        if let Some(editor) = current_editor {
+            if let Some(file) = file_path {
+                Self::opn_in_editor(file, editor)?;
+            }
+        } else {
+            self.default_mode()
+        }
+
+        // match self.context_selected {
+        //     0 => {
+        //         if let Some(path) = file_path  {
+        //             Self::opn_in_editor(path, current_editor)?;
+        //         }
+        //     }
+        //     1 => println!("Open in Vim"),
+        //     2 => println!("Open in WS"),
+        //     3 => println!("Open in RustRover"),
+        //     4 => println!("Open in VS CODE"),
+        //     _ => self.default_mode(),
+        // }
         Ok(())
     }
 
@@ -375,5 +447,15 @@ impl FileManager {
         Ok(())
     }
 
-    //     search
+    // open files in editor
+
+    fn opn_in_editor(file_path: &PathBuf, editor: &str) -> Result<(), io::Error> {
+        Command::new(editor)
+            .arg(file_path)
+            .stdout(Stdio::null()) // Перенаправляем stdout в /dev/null
+            .stderr(Stdio::null()) // Перенаправляем stderr в /dev/null
+            .spawn()?
+            .wait()?;
+        Ok(())
+    }
 }
