@@ -48,6 +48,7 @@ pub struct FileManager {
     context_action: Option<ContextAction>,
     context_selected: usize,
     search_buffer: String,
+    editors: Vec<String>,
 }
 
 impl FileManager {
@@ -71,6 +72,7 @@ impl FileManager {
             context_action: None,
             context_selected: 0,
             search_buffer: String::new(),
+            editors: Self::get_exists_editor_list(),
         })
     }
 
@@ -316,15 +318,23 @@ impl FileManager {
         ]
     }
 
-    pub fn show_context(&self) -> Vec<&str> {
-        vec![
-            "Открыть в Nano",
-            "Открыть в Vim",
-            "Открыть в WebStorm",
-            "Открыть в RustRover",
-            "Открыть в VS Code",
-            "Отмена",
-        ]
+    pub fn show_context(&self) -> Vec<String> {
+        let mut editor_list_with_prefix: Vec<String> = self
+            .editors
+            .iter()
+            .map(|e| format!("Открыть в {}", e))
+            .collect();
+        editor_list_with_prefix.push(String::from("Отмена"));
+        editor_list_with_prefix
+
+        // vec![
+        //     "Открыть в Nano",
+        //     "Открыть в Vim",
+        //     "Открыть в WebStorm",
+        //     "Открыть в RustRover",
+        //     "Открыть в VS Code",
+        //     "Отмена",
+        // ]
     }
 
     pub fn select_from_menu(&mut self) -> io::Result<()> {
@@ -349,8 +359,7 @@ impl FileManager {
 
     pub fn select_from_context(&mut self) -> io::Result<()> {
         let file_path = self.files.get(self.selected);
-        let editors = vec!["nano", "vim", "webstorm", "rustrover", "code"];
-        let current_editor = editors.get(self.context_selected);
+        let current_editor = self.editors.get(self.context_selected);
 
         if let Some(editor) = current_editor {
             if let Some(file) = file_path {
@@ -450,12 +459,75 @@ impl FileManager {
     // open files in editor
 
     fn opn_in_editor(file_path: &PathBuf, editor: &str) -> Result<(), io::Error> {
-        Command::new(editor)
-            .arg(file_path)
-            .stdout(Stdio::null()) // Перенаправляем stdout в /dev/null
-            .stderr(Stdio::null()) // Перенаправляем stderr в /dev/null
-            .spawn()?
-            .wait()?;
+        let mut binding = Command::new(editor);
+        match editor {
+            "nano" | "vim" => binding.arg(file_path),
+            _ => binding
+                .arg(file_path)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null()),
+        };
+        binding.spawn()?.wait()?;
+
         Ok(())
+    }
+
+    fn get_exists_editor_list() -> Vec<String> {
+        let know_list = Self::get_ide_list();
+        let mut exists_ides = Vec::new();
+
+        for ide in know_list {
+            let output = Command::new("which").arg(ide).output();
+            if let Ok(result) = output {
+                if result.status.success() {
+                    exists_ides.push(ide.to_string());
+                }
+            };
+        }
+
+        exists_ides
+    }
+
+    fn get_ide_list() -> Vec<&'static str> {
+         vec![
+            // Универсальные IDE
+            "code",      // Visual Studio Code
+            "codium",    // VSCodium (альтернатива VSCode)
+            "atom",      // Atom
+            "subl",      // Sublime Text
+            "gedit",     // GNOME Text Editor
+            "kate",      // KDE Advanced Text Editor
+            "notepadqq", // Notepad++ для Linux
+            "brackets",  // Brackets
+            // JetBrains IDE
+            "webstorm",  // WebStorm
+            "rustrover", // RustRover
+            "idea",      // IntelliJ IDEA
+            "phpstorm",  // PhpStorm
+            "pycharm",   // PyCharm
+            "clion",     // CLion
+            "goland",    // GoLand
+            "rider",     // Rider (для .NET)
+            "datagrip",  // DataGrip (для баз данных)
+            "rubymine",  // RubyMine
+            "appcode",   // AppCode (для iOS/macOS)
+            // Другие IDE
+            "eclipse",        // Eclipse
+            "netbeans",       // NetBeans
+            "codeblocks",     // Code::Blocks
+            "qtcreator",      // Qt Creator
+            "monodevelop",    // MonoDevelop
+            "xcode",          // Xcode (macOS)
+            "android-studio", // Android Studio
+            "arduino",        // Arduino IDE
+            "bluej",          // BlueJ (для Java)
+            "geany",          // Geany
+            "jupyter",        // Jupyter Notebook
+            "spyder",         // Spyder (для Python)
+            "rstudio",        // RStudio (для R)
+            "vim",            // Vim (текстовый редактор с IDE-функциями)
+            "emacs",          // Emacs (текстовый редактор с IDE-функциями)
+            "nano",           // Nano (простой текстовый редактор)
+        ]
     }
 }

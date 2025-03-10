@@ -106,7 +106,7 @@ pub fn render<B: Backend>(f: &mut Frame<B>, file_manager: &FileManager) {
                     } else {
                         Style::default()
                     };
-                    ListItem::new(Span::styled(*action, style))
+                    ListItem::new(Span::styled(action, style))
                 })
                 .collect();
             let menu = List::new(items)
